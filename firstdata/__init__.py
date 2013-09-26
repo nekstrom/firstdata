@@ -9,9 +9,12 @@ import datetime
 import os
 import urlparse
 
+import logging
+
 version = '0.5'
 __version__ = '0.5'
 
+log = logging.getLogger("firstdata")
 
 def JSONHandler(obj):
     if isinstance(obj, decimal.Decimal):
@@ -70,11 +73,12 @@ class FirstData(object):
             response = conn.getresponse().read()
 
             if verbose:
-                print json.dumps(dict(url="https://" + (self.GATEWAY_TEST if test else self.GATEWAY_LIVE) + "/transaction/v12",
+                log.debug(transaction_body)
+                log.debug(json.dumps(dict(url="https://" + (self.GATEWAY_TEST if test else self.GATEWAY_LIVE) + "/transaction/v12",
                                       transaction_body=transaction_body,
                                       headers=headers,
-                                      response=response))
-                print response
+                                      response=response)))
+                log.debug(response)
 
             if type(retry_on_bmc) is int and 0 < retry_on_bmc < 4 and response == "Unauthorized Request. Bad or missing credentials.":
                 """
@@ -84,8 +88,15 @@ class FirstData(object):
                 I have contacted their support about this issue...sometime ago.
                 """
                 if verbose:
-                    print json.dumps(dict(attempt=retry_on_bmc, source="First Data Unauthorized Request"))
+                    log.debug(json.dumps(dict(attempt=retry_on_bmc, source="First Data Unauthorized Request")))
                 return self.process(httpclient, callback, test, verbose, retry_on_bmc+1)
+            elif response == "Unauthorized Request. Bad or missing credentials.":
+                """
+                Still failing so it is probably us.  Throw an Error
+                """
+                raise FirstDataError(response)
+            elif response.startswith("Bad Request"):
+                raise FirstDataError(response)
             else:
                 try:
                     return json.loads(response)
